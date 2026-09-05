@@ -1,11 +1,14 @@
 package engine
 
-import "sync"
+import (
+	"hare/pkg/transport"
+	"sync"
+)
 
 const minTopicLen int = 10
 
 type Topic struct {
-	messages  [][]byte
+	// messages  [][]byte
 	consumers []chan []byte
 }
 
@@ -18,20 +21,20 @@ func New() *Engine {
 	return &Engine{topics: make(map[string]*Topic)}
 }
 
-func (e *Engine) Publish(topicName string, payload []byte) {
+func (e *Engine) Publish(msg transport.Message) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	_, exists := e.topics[topicName]
+	_, exists := e.topics[string(msg.Topic)]
 	if !exists {
-		e.topics[topicName] = &Topic{
-			messages:  make([][]byte, 0, minTopicLen),
+		e.topics[string(msg.Topic)] = &Topic{
+			// messages:  make([][]byte, 0, minTopicLen),
 			consumers: make([]chan []byte, 0, minTopicLen),
 		}
 	}
-	e.topics[topicName].messages = append(e.topics[topicName].messages, payload)
-	for _, ch := range e.topics[topicName].consumers {
-		ch <- payload
+	// e.topics[topicName].messages = append(e.topics[string(msg.Topic)].messages, payload)
+	for _, ch := range e.topics[string(msg.Topic)].consumers {
+		ch <- transport.EncodeMessage(msg)
 	}
 }
 
@@ -44,7 +47,7 @@ func (e *Engine) Subscribe(topicName string) chan []byte {
 	_, exists := e.topics[topicName]
 	if !exists {
 		e.topics[topicName] = &Topic{
-			messages:  make([][]byte, 0, minTopicLen),
+			// messages:  make([][]byte, 0, minTopicLen),
 			consumers: make([]chan []byte, 0, minTopicLen),
 		}
 	}
@@ -69,13 +72,13 @@ func (e *Engine) Unsubscribe(topicName string, ch chan []byte) {
 	}
 }
 
-func (e *Engine) GetMessages(topicName string) [][]byte {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
+// func (e *Engine) GetMessages(topicName string) [][]byte {
+// 	e.mu.RLock()
+// 	defer e.mu.RUnlock()
 
-	r, exists := e.topics[topicName]
-	if !exists {
-		return nil
-	}
-	return r.messages
-}
+// 	r, exists := e.topics[topicName]
+// 	if !exists {
+// 		return nil
+// 	}
+// 	return r.messages
+// }

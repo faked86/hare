@@ -1,61 +1,20 @@
 package server
 
 import (
-	"encoding/binary"
-	"io"
 	"log"
 	"net"
+
+	"hare/pkg/transport"
 )
 
-const DefaultTopicName = "default"
-
-func readMessage(conn net.Conn) (*Message, error) {
-	header := make([]byte, 5)
-	_, err := io.ReadFull(conn, header)
-	if err != nil {
-		return nil, err
-	}
-
-	cmd := header[0]
-	length := binary.BigEndian.Uint32(header[1:5])
-
-	var payload []byte
-
-	if length > 0 {
-		payload = make([]byte, length)
-		_, err = io.ReadFull(conn, payload)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		payload = nil
-	}
-
-	return &Message{
-		cmd:     Command(cmd),
-		payload: payload,
-	}, nil
-}
-
-// func logMessage(m *Message) {
-// 	var cmdStr string
-// 	if m.cmd == CmdPublish {
-// 		cmdStr = "PUBLISH"
-// 	}
-// 	if m.cmd == CmdSubscribe {
-// 		cmdStr = "SUBSCRIBE"
-// 	}
-// 	log.Printf("received command: %s, payload size = %d byte(s)\n", cmdStr, m.pLen)
-// }
-
-func handleMessage(s *Server, conn net.Conn, m *Message) {
-	switch m.cmd {
-	case CmdPublish:
-		s.engine.Publish(DefaultTopicName, m.payload)
-	case CmdSubscribe:
-		ch := s.engine.Subscribe(DefaultTopicName)
+func handleMessage(s *Server, conn net.Conn, m *transport.Message) {
+	switch m.Cmd {
+	case transport.CmdPublish:
+		s.engine.Publish(*m)
+	case transport.CmdSubscribe:
+		ch := s.engine.Subscribe(string(m.Topic))
 		go func() {
-			defer s.engine.Unsubscribe(DefaultTopicName, ch)
+			defer s.engine.Unsubscribe(string(m.Topic), ch)
 			for {
 				msg, ok := <-ch
 				if !ok {
@@ -68,18 +27,19 @@ func handleMessage(s *Server, conn net.Conn, m *Message) {
 		}()
 
 	default:
-		log.Printf("Unknown command: %d\n", m.cmd)
+		log.Printf("Unknown command: %d\n", m.Cmd)
 	}
 }
 
 func handleConnection(s *Server, conn net.Conn) {
 	defer conn.Close()
 	for {
-		m, err := readMessage(conn)
+		m, err := transport.DecodeMessage(conn)
 		if err != nil {
+			log.Println(err)
 			return
 		}
-		// logMessage(m)
+		log.Printf("received command: %s to topic %s, body size = %d byte(s)\n", m.Cmd, m.Topic, len(m.Body))
 		handleMessage(s, conn, m)
 	}
 }
