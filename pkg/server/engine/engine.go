@@ -2,6 +2,7 @@ package engine
 
 import (
 	"hare/pkg/transport"
+	"log"
 	"sync"
 )
 
@@ -34,7 +35,12 @@ func (e *Engine) Publish(msg transport.Message) {
 	}
 	// e.topics[topicName].messages = append(e.topics[string(msg.Topic)].messages, payload)
 	for _, ch := range e.topics[string(msg.Topic)].consumers {
-		ch <- transport.EncodeMessage(msg)
+		select {
+		case ch <- transport.EncodeMessage(msg):
+			//
+		default:
+			log.Printf("Channel is FULL. Consumer slow or dead, dropping message for topic %s\n", msg.Topic)
+		}
 	}
 }
 
