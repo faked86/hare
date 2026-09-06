@@ -8,7 +8,7 @@ import (
 	"hare/pkg/transport"
 )
 
-func handleMessage(s *Server, conn net.Conn, m *transport.Message) {
+func handleMessage(s *Server, conn net.Conn, m *transport.Message, done chan struct{}) {
 	switch m.Cmd {
 	case transport.CmdPublish:
 		s.engine.Publish(*m)
@@ -22,12 +22,16 @@ func handleMessage(s *Server, conn net.Conn, m *transport.Message) {
 			defer atomic.AddInt64(&s.activeConsumers, -1)
 
 			for {
-				msg, ok := <-ch
-				if !ok {
+				select {
+				case <-done:
 					return
-				}
-				if _, err := conn.Write(msg); err != nil {
-					return
+				case msg, ok := <-ch:
+					if !ok {
+						return
+					}
+					if _, err := conn.Write(msg); err != nil {
+						return
+					}
 				}
 			}
 		}()
@@ -39,6 +43,9 @@ func handleMessage(s *Server, conn net.Conn, m *transport.Message) {
 
 func handleConnection(s *Server, conn net.Conn) {
 	defer conn.Close()
+	done := make(chan struct{})
+	defer close(done)
+
 	for {
 		m, err := transport.DecodeMessage(conn)
 		if err != nil {
@@ -46,6 +53,6 @@ func handleConnection(s *Server, conn net.Conn) {
 			return
 		}
 		log.Printf("received command: %s to topic %s, body size = %d byte(s)\n", m.Cmd, m.Topic, len(m.Body))
-		handleMessage(s, conn, m)
+		handleMessage(s, conn, m, done)
 	}
 }
