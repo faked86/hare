@@ -3,6 +3,7 @@ package server
 import (
 	"log"
 	"net"
+	"sync/atomic"
 
 	"hare/pkg/transport"
 )
@@ -11,10 +12,15 @@ func handleMessage(s *Server, conn net.Conn, m *transport.Message) {
 	switch m.Cmd {
 	case transport.CmdPublish:
 		s.engine.Publish(*m)
+		atomic.AddUint64(&s.pubCount, 1)
 	case transport.CmdSubscribe:
 		ch := s.engine.Subscribe(string(m.Topic))
 		go func() {
 			defer s.engine.Unsubscribe(string(m.Topic), ch)
+
+			atomic.AddInt64(&s.activeConsumers, 1)
+			defer atomic.AddInt64(&s.activeConsumers, -1)
+
 			for {
 				msg, ok := <-ch
 				if !ok {

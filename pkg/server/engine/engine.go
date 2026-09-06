@@ -37,7 +37,6 @@ func (e *Engine) Publish(msg transport.Message) {
 	for _, ch := range e.topics[string(msg.Topic)].consumers {
 		select {
 		case ch <- transport.EncodeMessage(msg):
-			//
 		default:
 			log.Printf("Channel is FULL. Consumer slow or dead, dropping message for topic %s\n", msg.Topic)
 		}
